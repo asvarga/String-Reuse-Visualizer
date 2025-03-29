@@ -1,7 +1,7 @@
 
 # String Reuse Visualizer
 
-Macros, linters, formatters, error message, transpilers, etc. all transform source code to similarly structured code. Users and maintainers of these tools may want to understand how output content relates back to input content.
+Macros, linters, formatters, error messages, transpilers, etc. all transform source code to similarly structured code. Users and maintainers of these tools may want to understand how output content relates back to input content.
 
 This demo shows how when these tools do a good job of using strings by reference rather than by copying, it becomes easy to show these relations by inspecting the addresses of the content in memory.
 
