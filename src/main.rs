@@ -182,14 +182,14 @@ fn main() -> io::Result<()> {
                         span = Span::styled(
                             (if c == ' ' { '·' } else { c }).to_string(),
                             Style::default().fg(Color::Blue),
-                        )
+                        );
                     } else if let Some(out) = rel.rel(addr) {
                         if !out.is_disjoint(&addresses) {
                             // upstream of selected
                             span = Span::styled(
                                 (if c == ' ' { '·' } else { c }).to_string(),
                                 Style::default().fg(Color::Green),
-                            )
+                            );
                         }
                     } else if let Some(out) = rel.inv(addr) {
                         if !out.is_disjoint(&addresses) {
@@ -197,7 +197,7 @@ fn main() -> io::Result<()> {
                             span = Span::styled(
                                 (if c == ' ' { '·' } else { c }).to_string(),
                                 Style::default().fg(Color::Yellow),
-                            )
+                            );
                         }
                     }
                     spans.push(span);

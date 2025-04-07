@@ -141,7 +141,7 @@ impl<'a> From<&'a str> for Rope<'a> {
 impl Display for Rope<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for slice in &self.data {
-            write!(f, "{}", slice)?;
+            write!(f, "{slice}")?;
         }
         Ok(())
     }
