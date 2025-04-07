@@ -1,3 +1,4 @@
+pub mod relation;
 pub mod rope;
 
 /**************************************************************/
@@ -16,6 +17,7 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Paragraph};
 use ratatui::Terminal;
 use regex::Regex;
+use relation::{str_addrs, Relation};
 use rope::Rope;
 use std::collections::BTreeSet;
 use std::io;
@@ -24,40 +26,20 @@ use tui_textarea::{Input, Key, TextArea};
 
 /**************************************************************/
 
-fn f<'a>(input: &Rope<'a>) -> Rope<'a> {
-    let re_indent = Regex::new(r#"Indent: ".*""#).unwrap();
-    let re_period = Regex::new(r#"\."#).unwrap();
+fn header(s: &str) -> Rope<'_> {
+    let mut header = Rope::new();
+    header.append("\n".into());
+    header.append("\n".into());
+    header.append("###".into());
+    header.append(s.into());
+    header.append("###".into());
+    header.append("\n".into());
+    header.append("\n".into());
+    header
+}
 
-    let mut modified = Rope::new();
-    modified.append(input.re_replaces(&re_period, &"??".into()));
-    modified.append("\n".into());
-    modified.append("\n".into());
-    modified.append(input.re_replaces(&re_period, &"!!".into()));
-
-    // Find indent and apply it
-    if let Some(indent) = modified.re_slice(&re_indent) {
-        modified = modified.indent(&indent.slice(9..indent.len() - 1));
-    }
-
-    fn header(s: &str) -> Rope<'_> {
-        let mut header = Rope::new();
-        header.append("\n".into());
-        header.append("\n".into());
-        header.append("###".into());
-        header.append(s.into());
-        header.append("###".into());
-        header.append("\n".into());
-        header.append("\n".into());
-        header
-    }
-
-    let mut output = Rope::new();
-    output.append(header(" INPUT "));
-    output.append(input.clone());
-    output.append(header(" OUTPUT "));
-    output.append(modified);
-
-    output
+fn reverse(s: &str) -> String {
+    s.chars().rev().collect()
 }
 
 fn main() -> io::Result<()> {
@@ -73,7 +55,8 @@ fn main() -> io::Result<()> {
         → Right : Shows modified text. Select text to view str reuse.
         ␛ Exit  : Press `Esc` to exit...
 
-        Indent: \"    \""};
+        Indent: \"    \"
+        Modify: \"abcdefgh\""};
     let mut textarea = TextArea::default();
     textarea.insert_str(input);
     textarea.set_block(Block::bordered().title(" Input "));
@@ -86,20 +69,62 @@ fn main() -> io::Result<()> {
 
     let mut xys = BTreeSet::<(usize, usize)>::new();
 
+    let re_indent = Regex::new(r#"Indent: ".*""#).unwrap();
+    let re_period = Regex::new(r#"\."#).unwrap();
+    let re_modify = Regex::new(r#"Modify: ".*""#).unwrap();
+
     loop {
+        // set up string tracking context
+        let mut arena = vec![];
+        let mut rel = Relation::default();
+
         // inputs
         let input_str = textarea.lines().join("\n");
-        let input_rope = Rope::from(input_str.as_str());
+        let input = Rope::from(input_str.as_str());
 
         // outputs
-        let output_rope = f(&input_rope);
-        let output = output_rope.to_string();
+
+        // the first part replaces all periods with "??"
+        let part1 = input.re_replaces(&re_period, &"??".into());
+
+        // the second part replaces all periods with "!!" and reverses the modify
+        let mut part2 = input.re_replaces(&re_period, &"!!".into());
+        if let Some(mat) = input.re_slice(&re_modify) {
+            let forward = mat.slice(9..mat.len() - 1);
+            let backward = reverse(&forward.to_string());
+            arena.push(backward);
+            let backward = arena.last().unwrap();
+            rel.add_n_n(&forward.addrs(), &str_addrs(backward));
+
+            let mut backward_rope = mat.slice(0..9);
+            backward_rope.append(backward.as_str().into());
+            backward_rope.append(mat.slice(mat.len() - 1..mat.len()));
+            part2 = part2.re_replace(&re_modify, &backward_rope);
+        }
+
+        let mut modified = Rope::new();
+        modified.append(part1);
+        modified.append("\n".into());
+        modified.append("\n".into());
+        modified.append(part2);
+
+        // Find indent and apply it
+        if let Some(indent) = input.re_slice(&re_indent) {
+            modified = modified.indent(&indent.slice(9..indent.len() - 1));
+        }
+
+        let mut output = Rope::new();
+        output.append(header(" INPUT "));
+        output.append(input.clone());
+        output.append(header(" OUTPUT "));
+        output.append(modified);
+        let output_str = output.to_string();
 
         // get all selected addresses based on the current xys (mouse positions).
         let mut addresses = BTreeSet::<usize>::new();
         let mut x = 0;
         let mut y = 0;
-        for data in &output_rope.data {
+        for data in &output.data {
             let mut addr = data.as_ptr() as usize;
             for c in data.chars() {
                 if c == '\n' {
@@ -120,7 +145,7 @@ fn main() -> io::Result<()> {
         let mut spans = vec![];
         let mut x = 0;
         let mut y = 0;
-        for data in &output_rope.data {
+        for data in &output.data {
             let mut addr = data.as_ptr() as usize;
             for c in data.chars() {
                 if c == '\n' {
@@ -129,19 +154,36 @@ fn main() -> io::Result<()> {
                     lines.push(Line::from(spans.clone()));
                     spans.clear();
                 } else {
-                    let span = if xys.contains(&(x, y)) {
-                        Span::styled(
+                    let mut span = Span::from(c.to_string());
+                    if xys.contains(&(x, y)) {
+                        // selected
+                        span = Span::styled(
                             (if c == ' ' { '·' } else { c }).to_string(),
                             Style::default().fg(Color::Red),
-                        )
+                        );
                     } else if addresses.contains(&addr) {
-                        Span::styled(
+                        // same address as selected
+                        span = Span::styled(
                             (if c == ' ' { '·' } else { c }).to_string(),
                             Style::default().fg(Color::Blue),
                         )
-                    } else {
-                        Span::from(c.to_string())
-                    };
+                    } else if let Some(out) = rel.rel(addr) {
+                        if !out.is_disjoint(&addresses) {
+                            // upstream of selected
+                            span = Span::styled(
+                                (if c == ' ' { '·' } else { c }).to_string(),
+                                Style::default().fg(Color::Green),
+                            )
+                        }
+                    } else if let Some(out) = rel.inv(addr) {
+                        if !out.is_disjoint(&addresses) {
+                            // downstream of selected
+                            span = Span::styled(
+                                (if c == ' ' { '·' } else { c }).to_string(),
+                                Style::default().fg(Color::Yellow),
+                            )
+                        }
+                    }
                     spans.push(span);
                     x += 1;
                 }
@@ -183,7 +225,7 @@ fn main() -> io::Result<()> {
                 if kind != MouseEventKind::Moved {
                     let mouse_x = column.saturating_sub(chunk_x + 1) as usize;
                     let mouse_y = row.saturating_sub(chunk_y + 1) as usize;
-                    if let Some(line) = output.lines().nth(mouse_y) {
+                    if let Some(line) = output_str.lines().nth(mouse_y) {
                         if line.len() > mouse_x {
                             xys.insert((mouse_x, mouse_y));
                         }

@@ -112,6 +112,18 @@ impl<'a> Rope<'a> {
         ret.append(self.re_replaces(&re_newline, &replacement));
         ret
     }
+
+    pub fn addrs(&self) -> Vec<usize> {
+        let mut addresses = vec![];
+        for data in &self.data {
+            let mut addr = data.as_ptr() as usize;
+            for c in data.chars() {
+                addresses.push(addr);
+                addr += c.len_utf8();
+            }
+        }
+        addresses
+    }
 }
 
 impl Default for Rope<'_> {
