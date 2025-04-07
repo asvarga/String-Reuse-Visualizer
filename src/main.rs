@@ -1,8 +1,10 @@
+pub mod arena;
 pub mod relation;
 pub mod rope;
 
 /**************************************************************/
 
+use arena::Arena;
 use crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, MouseEvent, MouseEventKind,
 };
@@ -42,6 +44,10 @@ fn reverse(s: &str) -> String {
     s.chars().rev().collect()
 }
 
+fn filter(s: &str) -> String {
+    s.chars().filter(|c| !"aeiouyAEIOUY".contains(*c)).collect()
+}
+
 fn main() -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
@@ -56,7 +62,7 @@ fn main() -> io::Result<()> {
         ␛ Exit  : Press `Esc` to exit...
 
         Indent: \"    \"
-        Modify: \"abcdefgh\""};
+        Modify: \"abcdefghi\""};
     let mut textarea = TextArea::default();
     textarea.insert_str(input);
     textarea.set_block(Block::bordered().title(" Input "));
@@ -75,7 +81,7 @@ fn main() -> io::Result<()> {
 
     loop {
         // set up string tracking context
-        let mut arena = vec![];
+        let mut arena = Arena::default();
         let mut rel = Relation::default();
 
         // inputs
@@ -83,23 +89,33 @@ fn main() -> io::Result<()> {
         let input = Rope::from(input_str.as_str());
 
         // outputs
-
-        // the first part replaces all periods with "??"
-        let part1 = input.re_replaces(&re_period, &"??".into());
-
-        // the second part replaces all periods with "!!" and reverses the modify
+        let mut part1 = input.re_replaces(&re_period, &"??".into());
         let mut part2 = input.re_replaces(&re_period, &"!!".into());
         if let Some(mat) = input.re_slice(&re_modify) {
-            let forward = mat.slice(9..mat.len() - 1);
-            let backward = reverse(&forward.to_string());
-            arena.push(backward);
-            let backward = arena.last().unwrap();
-            rel.add_n_n(&forward.addrs(), &str_addrs(backward));
+            let input = mat.slice(9..mat.len() - 1);
+            let input_str = input.to_string();
 
-            let mut backward_rope = mat.slice(0..9);
-            backward_rope.append(backward.as_str().into());
-            backward_rope.append(mat.slice(mat.len() - 1..mat.len()));
-            part2 = part2.re_replace(&re_modify, &backward_rope);
+            let reversed = reverse(&input_str);
+            let filtered = filter(&input_str);
+
+            let reversed_id = arena.allocate(reversed);
+            let filterd_id = arena.allocate(filtered);
+
+            let reversed = arena.get(reversed_id).unwrap();
+            let filtered = arena.get(filterd_id).unwrap();
+
+            rel.add_n_n(&input.addrs(), &str_addrs(reversed));
+            rel.add_n_n(&input.addrs(), &str_addrs(filtered));
+
+            let mut reversed_rope = mat.slice(0..9);
+            reversed_rope.append(reversed.as_str().into());
+            reversed_rope.append(mat.slice(mat.len() - 1..mat.len()));
+            part1 = part1.re_replace(&re_modify, &reversed_rope);
+
+            let mut filtered_rope = mat.slice(0..9);
+            filtered_rope.append(filtered.as_str().into());
+            filtered_rope.append(mat.slice(mat.len() - 1..mat.len()));
+            part2 = part2.re_replace(&re_modify, &filtered_rope);
         }
 
         let mut modified = Rope::new();
