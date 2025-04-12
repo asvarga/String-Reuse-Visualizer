@@ -1,17 +1,32 @@
 
 # String Reuse Visualizer
 
-Macros, linters, formatters, error messages, transpilers, etc. all transform source code to similarly structured code. Users and maintainers of these tools may want to understand how output content relates back to input content.
+Macros, linters, formatters, error messages, transpilers, etc. all transform code to code. Users and maintainers of these tools may want insight into how parts of the output code correspond to parts of the input code.
 
-This demo shows how when these tools do a good job of using strings by reference rather than by copying, it becomes easy to show these relations by inspecting the addresses of the content in memory.
-
-### Instructions
-
-Install Rust and run `cargo run`
+This demo illustrates how using string content by reference rather than cloning makes it easy for tools to identify these correspondences by inspecting the addresses of the characters in memory.
 
 ![Screenshot](./files/screenshot.png)
 
-### Details
+## Try It
+
+### Local
+
+Install [Rust](https://www.rust-lang.org/tools/install), clone the repo, `cargo run`
+
+### Online
+
+To try it online, sign in to https://labs.play-with-docker.com/ and run the following commands:
+
+```bash
+# spin up a rust image
+docker run -it rust bash
+# clone the repo
+git clone https://github.com/asvarga/String-Reuse-Visualizer && cd String-Reuse-Visualizer
+# run it
+cargo run
+```
+
+## Details
 
 The trick is to operate on data structures built up of `&str` slices into the input `String`, rather than building up entirely new `String`s in memory. In this demo, I use a `Vec<&str>` for simplicity, but better data structures exist like [ropes](https://en.wikipedia.org/wiki/Rope_(data_structure)). Operations for concatenation, indexing, slicing, searching, replacing, etc. are implemented without any actual string copying.
 
